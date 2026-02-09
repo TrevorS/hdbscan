@@ -67,6 +67,7 @@ Start with `DefaultConfig()` and override what you need:
 | `ClusterSelectionEpsilon` | 0.0 | Minimum distance threshold to prevent over-segmentation |
 | `Algorithm` | `"auto"` | MST construction strategy (see [Algorithms](#algorithms) below) |
 | `LeafSize` | 40 | Max points per spatial tree leaf node (tree-based algorithms only) |
+| `Workers` | `runtime.NumCPU()` | Goroutines for parallel stages in brute-force path (distances, core distances, mutual reachability) |
 
 ## Output
 
@@ -86,7 +87,7 @@ The `Algorithm` config field selects how the minimum spanning tree is constructe
 | Algorithm | Memory | Best for | Notes |
 |-----------|--------|----------|-------|
 | `"auto"` | varies | General use | Picks `boruvka_kdtree` for standard metrics ≤60 dims, `boruvka_balltree` otherwise, `brute` for custom metrics |
-| `"brute"` | O(n²) | Small datasets, custom metrics | Builds full distance matrix |
+| `"brute"` | O(n²) | Small datasets, custom metrics | Builds full distance matrix; parallelizes distance/core/reachability stages across `Workers` goroutines |
 | `"prims_kdtree"` | O(n) | Medium datasets | KD-tree core distances + matrix-free Prim's MST |
 | `"prims_balltree"` | O(n) | Medium datasets, higher dims | Ball tree core distances + matrix-free Prim's MST |
 | `"boruvka_kdtree"` | O(n) | Large datasets, low dims | Dual-tree Borůvka MST (fastest for ≤60 dims) |

@@ -149,3 +149,104 @@ func TestComputePairwiseDistancesParallel_LargerDataset(t *testing.T) {
 		}
 	}
 }
+
+// --- Parallel Core Distances ---
+
+func TestComputeCoreDistancesParallel_BitwiseIdentical(t *testing.T) {
+	n, dims := 20, 3
+	data := make([]float64, n*dims)
+	for i := range data {
+		data[i] = math.Sin(float64(i) * 0.7)
+	}
+	distMatrix := ComputePairwiseDistances(data, n, dims, EuclideanMetric{})
+
+	sequential := ComputeCoreDistances(distMatrix, n, 5)
+
+	for _, workers := range []int{1, 2, 4, 7} {
+		parallel := ComputeCoreDistancesParallel(distMatrix, n, 5, workers)
+
+		if len(parallel) != len(sequential) {
+			t.Fatalf("workers=%d: length mismatch %d != %d", workers, len(parallel), len(sequential))
+		}
+		for i := range sequential {
+			if parallel[i] != sequential[i] {
+				t.Errorf("workers=%d: core[%d] = %v, expected %v (bitwise)",
+					workers, i, parallel[i], sequential[i])
+			}
+		}
+	}
+}
+
+func TestComputeCoreDistancesParallel_SinglePoint(t *testing.T) {
+	distMatrix := []float64{0}
+	result := ComputeCoreDistancesParallel(distMatrix, 1, 1, 4)
+	if len(result) != 1 || result[0] != 0 {
+		t.Errorf("expected [0], got %v", result)
+	}
+}
+
+func TestComputeCoreDistancesParallel_MinSamples0(t *testing.T) {
+	distMatrix := []float64{0, 1, 1, 0}
+	result := ComputeCoreDistancesParallel(distMatrix, 2, 0, 4)
+	for i, v := range result {
+		if v != 0 {
+			t.Errorf("core[%d] = %v, expected 0", i, v)
+		}
+	}
+}
+
+// --- Parallel Mutual Reachability ---
+
+func TestMutualReachabilityParallel_BitwiseIdentical(t *testing.T) {
+	n, dims := 20, 3
+	data := make([]float64, n*dims)
+	for i := range data {
+		data[i] = math.Sin(float64(i) * 0.7)
+	}
+	distMatrix := ComputePairwiseDistances(data, n, dims, EuclideanMetric{})
+	coreDistances := ComputeCoreDistances(distMatrix, n, 5)
+
+	sequential := MutualReachability(distMatrix, coreDistances, n, 1.0)
+
+	for _, workers := range []int{1, 2, 4, 7} {
+		parallel := MutualReachabilityParallel(distMatrix, coreDistances, n, 1.0, workers)
+
+		if len(parallel) != len(sequential) {
+			t.Fatalf("workers=%d: length mismatch %d != %d", workers, len(parallel), len(sequential))
+		}
+		for i := range sequential {
+			if parallel[i] != sequential[i] {
+				t.Errorf("workers=%d: mr[%d] = %v, expected %v (bitwise)",
+					workers, i, parallel[i], sequential[i])
+			}
+		}
+	}
+}
+
+func TestMutualReachabilityParallel_Alpha(t *testing.T) {
+	n, dims := 10, 2
+	data := make([]float64, n*dims)
+	for i := range data {
+		data[i] = float64(i) * 1.5
+	}
+	distMatrix := ComputePairwiseDistances(data, n, dims, EuclideanMetric{})
+	coreDistances := ComputeCoreDistances(distMatrix, n, 3)
+
+	sequential := MutualReachability(distMatrix, coreDistances, n, 0.5)
+	parallel := MutualReachabilityParallel(distMatrix, coreDistances, n, 0.5, 4)
+
+	for i := range sequential {
+		if parallel[i] != sequential[i] {
+			t.Errorf("alpha=0.5: mr[%d] = %v, expected %v", i, parallel[i], sequential[i])
+		}
+	}
+}
+
+func TestMutualReachabilityParallel_SinglePoint(t *testing.T) {
+	distMatrix := []float64{0}
+	coreDistances := []float64{0}
+	result := MutualReachabilityParallel(distMatrix, coreDistances, 1, 1.0, 4)
+	if len(result) != 1 || result[0] != 0 {
+		t.Errorf("expected [0], got %v", result)
+	}
+}

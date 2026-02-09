@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"runtime"
 )
 
 // Algorithm selects the MST construction strategy.
@@ -88,6 +89,12 @@ type Config struct {
 	// Larger values trade query precision for faster tree construction.
 	// Only used with tree-based algorithms. Default: 40.
 	LeafSize int
+
+	// Workers controls the number of goroutines for parallelizable stages
+	// (pairwise distances, core distances, mutual reachability). Only affects
+	// the brute-force algorithm path. 0 means use runtime.NumCPU().
+	// Default: 0 (auto).
+	Workers int
 }
 
 // Result contains the output of HDBSCAN clustering.
@@ -180,6 +187,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.LeafSize == 0 {
 		cfg.LeafSize = 40
 	}
+	if cfg.Workers == 0 {
+		cfg.Workers = runtime.NumCPU()
+	}
 }
 
 // emptyResult returns a Result with empty/zero-length slices for n data points.
@@ -225,7 +235,7 @@ func Cluster(data [][]float64, cfg Config) (*Result, error) {
 		return clusterBoruvka(flatData, n, dims, cfg, algo)
 	default:
 		// AlgorithmBrute: use full distance matrix.
-		distMatrix := ComputePairwiseDistances(flatData, n, dims, cfg.Metric)
+		distMatrix := ComputePairwiseDistancesParallel(flatData, n, dims, cfg.Metric, cfg.Workers)
 		return clusterFromDistMatrix(distMatrix, n, cfg)
 	}
 }
@@ -387,8 +397,8 @@ func clusterFromDistMatrix(distMatrix []float64, n int, cfg Config) (*Result, er
 		return r, nil
 	}
 
-	coreDistances := ComputeCoreDistances(distMatrix, n, minSamples)
-	mrMatrix := MutualReachability(distMatrix, coreDistances, n, cfg.Alpha)
+	coreDistances := ComputeCoreDistancesParallel(distMatrix, n, minSamples, cfg.Workers)
+	mrMatrix := MutualReachabilityParallel(distMatrix, coreDistances, n, cfg.Alpha, cfg.Workers)
 	mstEdges := PrimMST(mrMatrix, n)
 	return clusterFromMST(mstEdges, n, cfg)
 }
