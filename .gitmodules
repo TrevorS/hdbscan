@@ -1,0 +1,3 @@
+[submodule "reference/scikit-learn-contrib-hdbscan"]
+	path = reference/scikit-learn-contrib-hdbscan
+	url = git@github.com:scikit-learn-contrib/hdbscan.git

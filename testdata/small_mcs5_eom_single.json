@@ -1,0 +1,132 @@
+{
+  "dataset": "small",
+  "config": {
+    "min_cluster_size": 5,
+    "cluster_selection_method": "eom",
+    "allow_single_cluster": true,
+    "metric": "euclidean"
+  },
+  "data": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0
+    ],
+    [
+      10.0,
+      10.0
+    ],
+    [
+      11.0,
+      10.0
+    ],
+    [
+      10.0,
+      11.0
+    ]
+  ],
+  "labels": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "probabilities": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "outlier_scores": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "stabilities": {
+    "6": 0.40360367639778744
+  },
+  "condensed_tree": [
+    {
+      "parent": 6,
+      "child": 5,
+      "lambda_val": 0.06726727939963124,
+      "child_size": 1
+    },
+    {
+      "parent": 6,
+      "child": 0,
+      "lambda_val": 0.06726727939963124,
+      "child_size": 1
+    },
+    {
+      "parent": 6,
+      "child": 3,
+      "lambda_val": 0.06726727939963124,
+      "child_size": 1
+    },
+    {
+      "parent": 6,
+      "child": 1,
+      "lambda_val": 0.06726727939963124,
+      "child_size": 1
+    },
+    {
+      "parent": 6,
+      "child": 2,
+      "lambda_val": 0.06726727939963124,
+      "child_size": 1
+    },
+    {
+      "parent": 6,
+      "child": 4,
+      "lambda_val": 0.06726727939963124,
+      "child_size": 1
+    }
+  ],
+  "single_linkage_tree": [
+    [
+      1.0,
+      2.0,
+      14.212670403551895,
+      2.0
+    ],
+    [
+      6.0,
+      3.0,
+      14.212670403551895,
+      3.0
+    ],
+    [
+      0.0,
+      7.0,
+      14.866068747318506,
+      4.0
+    ],
+    [
+      8.0,
+      4.0,
+      14.866068747318506,
+      5.0
+    ],
+    [
+      9.0,
+      5.0,
+      14.866068747318506,
+      6.0
+    ]
+  ]
+}
