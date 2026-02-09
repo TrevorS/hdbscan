@@ -7,6 +7,12 @@ import "math"
 type DistanceMetric interface {
 	Distance(a, b []float64) float64
 	ReducedDistance(a, b []float64) float64
+	// DistToRdist converts a true distance to reduced distance space.
+	// Euclidean: d*d. Most other metrics: identity.
+	DistToRdist(dist float64) float64
+	// RdistToDist converts a reduced distance back to true distance.
+	// Euclidean: sqrt(d). Most other metrics: identity.
+	RdistToDist(rdist float64) float64
 }
 
 // DistanceFunc adapts a plain function into a DistanceMetric.
@@ -15,6 +21,8 @@ type DistanceFunc func(a, b []float64) float64
 
 func (f DistanceFunc) Distance(a, b []float64) float64        { return f(a, b) }
 func (f DistanceFunc) ReducedDistance(a, b []float64) float64 { return f(a, b) }
+func (f DistanceFunc) DistToRdist(dist float64) float64       { return dist }
+func (f DistanceFunc) RdistToDist(rdist float64) float64      { return rdist }
 
 // EuclideanMetric computes the Euclidean (L2) distance.
 // ReducedDistance returns squared Euclidean distance (skips sqrt).
@@ -27,6 +35,9 @@ func (EuclideanMetric) Distance(a, b []float64) float64 {
 func (EuclideanMetric) ReducedDistance(a, b []float64) float64 {
 	return euclideanSumOfSquares(a, b)
 }
+
+func (EuclideanMetric) DistToRdist(dist float64) float64  { return dist * dist }
+func (EuclideanMetric) RdistToDist(rdist float64) float64 { return math.Sqrt(rdist) }
 
 func euclideanSumOfSquares(a, b []float64) float64 {
 	var sum float64
@@ -49,6 +60,8 @@ func (ManhattanMetric) Distance(a, b []float64) float64 {
 }
 
 func (m ManhattanMetric) ReducedDistance(a, b []float64) float64 { return m.Distance(a, b) }
+func (ManhattanMetric) DistToRdist(dist float64) float64         { return dist }
+func (ManhattanMetric) RdistToDist(rdist float64) float64        { return rdist }
 
 // CosineMetric computes the cosine distance: 1 - cosine_similarity.
 // For two zero vectors, the result is NaN (0/0).
@@ -65,6 +78,8 @@ func (CosineMetric) Distance(a, b []float64) float64 {
 }
 
 func (m CosineMetric) ReducedDistance(a, b []float64) float64 { return m.Distance(a, b) }
+func (CosineMetric) DistToRdist(dist float64) float64         { return dist }
+func (CosineMetric) RdistToDist(rdist float64) float64        { return rdist }
 
 // ChebyshevMetric computes the Chebyshev (L-infinity) distance.
 type ChebyshevMetric struct{}
@@ -80,6 +95,8 @@ func (ChebyshevMetric) Distance(a, b []float64) float64 {
 }
 
 func (m ChebyshevMetric) ReducedDistance(a, b []float64) float64 { return m.Distance(a, b) }
+func (ChebyshevMetric) DistToRdist(dist float64) float64         { return dist }
+func (ChebyshevMetric) RdistToDist(rdist float64) float64        { return rdist }
 
 // MinkowskiMetric computes the Minkowski distance parameterized by P.
 // P must be >= 1. Panics if P < 1.
@@ -95,6 +112,9 @@ func (m MinkowskiMetric) Distance(a, b []float64) float64 {
 func (m MinkowskiMetric) ReducedDistance(a, b []float64) float64 {
 	return m.rawSum(a, b)
 }
+
+func (m MinkowskiMetric) DistToRdist(dist float64) float64  { return math.Pow(dist, m.P) }
+func (m MinkowskiMetric) RdistToDist(rdist float64) float64 { return math.Pow(rdist, 1.0/m.P) }
 
 func (m MinkowskiMetric) rawSum(a, b []float64) float64 {
 	if m.P < 1 {

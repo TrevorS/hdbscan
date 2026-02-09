@@ -6,6 +6,18 @@ import (
 	"math"
 )
 
+// Algorithm selects the MST construction strategy.
+type Algorithm string
+
+const (
+	AlgorithmAuto            Algorithm = "auto"
+	AlgorithmBrute           Algorithm = "brute"
+	AlgorithmPrimsKDTree     Algorithm = "prims_kdtree"
+	AlgorithmPrimsBalltree   Algorithm = "prims_balltree"
+	AlgorithmBoruvkaKDTree   Algorithm = "boruvka_kdtree"
+	AlgorithmBoruvkaBalltree Algorithm = "boruvka_balltree"
+)
+
 // Config controls HDBSCAN clustering behavior.
 // Start with [DefaultConfig] and override the fields you need.
 type Config struct {
@@ -63,6 +75,19 @@ type Config struct {
 	// match the Python scikit-learn-contrib/hdbscan library, at the cost of
 	// some API cleanliness. Default: false.
 	MatchReferenceImplementation bool
+
+	// Algorithm selects the MST construction strategy.
+	// "auto" picks the best algorithm based on metric and dimensionality.
+	// "brute" uses the full distance matrix (O(n²) memory).
+	// "prims_kdtree"/"prims_balltree" use Prim's without a full matrix.
+	// "boruvka_kdtree"/"boruvka_balltree" use dual-tree Borůvka (fastest for
+	// low-dimensional data). Default: "auto".
+	Algorithm Algorithm
+
+	// LeafSize controls the maximum number of points in a spatial tree leaf node.
+	// Larger values trade query precision for faster tree construction.
+	// Only used with tree-based algorithms. Default: 40.
+	LeafSize int
 }
 
 // Result contains the output of HDBSCAN clustering.
@@ -124,6 +149,17 @@ func validateConfig(cfg *Config) error {
 	if cfg.ClusterSelectionPersistence < 0 {
 		return fmt.Errorf("hdbscan: ClusterSelectionPersistence must be >= 0, got %f", cfg.ClusterSelectionPersistence)
 	}
+	switch cfg.Algorithm {
+	case AlgorithmAuto, AlgorithmBrute,
+		AlgorithmPrimsKDTree, AlgorithmPrimsBalltree,
+		AlgorithmBoruvkaKDTree, AlgorithmBoruvkaBalltree:
+		// valid
+	default:
+		return fmt.Errorf("hdbscan: invalid Algorithm %q", cfg.Algorithm)
+	}
+	if cfg.LeafSize < 1 {
+		return fmt.Errorf("hdbscan: LeafSize must be >= 1, got %d", cfg.LeafSize)
+	}
 	return nil
 }
 
@@ -137,6 +173,12 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.ClusterSelectionEpsilonMax == 0 {
 		cfg.ClusterSelectionEpsilonMax = math.Inf(1)
+	}
+	if cfg.Algorithm == "" {
+		cfg.Algorithm = AlgorithmAuto
+	}
+	if cfg.LeafSize == 0 {
+		cfg.LeafSize = 40
 	}
 }
 
@@ -171,8 +213,21 @@ func Cluster(data [][]float64, cfg Config) (*Result, error) {
 		copy(flatData[i*dims:], row)
 	}
 
-	distMatrix := ComputePairwiseDistances(flatData, n, dims, cfg.Metric)
-	return clusterFromDistMatrix(distMatrix, n, cfg)
+	algo, err := selectAlgorithm(cfg, n, dims)
+	if err != nil {
+		return nil, err
+	}
+
+	switch algo {
+	case AlgorithmPrimsKDTree, AlgorithmPrimsBalltree:
+		return clusterPrimsTree(flatData, n, dims, cfg, algo)
+	case AlgorithmBoruvkaKDTree, AlgorithmBoruvkaBalltree:
+		return clusterBoruvka(flatData, n, dims, cfg, algo)
+	default:
+		// AlgorithmBrute: use full distance matrix.
+		distMatrix := ComputePairwiseDistances(flatData, n, dims, cfg.Metric)
+		return clusterFromDistMatrix(distMatrix, n, cfg)
+	}
 }
 
 // ClusterPrecomputed performs HDBSCAN on a precomputed distance matrix.
@@ -196,8 +251,9 @@ func ClusterPrecomputed(distMatrix []float64, n int, cfg Config) (*Result, error
 	return clusterFromDistMatrix(distMatrix, n, cfg)
 }
 
-// clusterFromDistMatrix runs the HDBSCAN pipeline from a precomputed distance matrix.
-func clusterFromDistMatrix(distMatrix []float64, n int, cfg Config) (*Result, error) {
+// clusterPrimsTree runs the HDBSCAN pipeline using tree-accelerated core distances
+// and matrix-free Prim's MST (O(n²) time, O(n) memory).
+func clusterPrimsTree(flatData []float64, n, dims int, cfg Config, algo Algorithm) (*Result, error) {
 	minSamples := cfg.MinSamples
 	if minSamples > n-1 {
 		minSamples = n - 1
@@ -205,17 +261,62 @@ func clusterFromDistMatrix(distMatrix []float64, n int, cfg Config) (*Result, er
 	if minSamples < 1 && n > 1 {
 		return nil, errors.New("hdbscan: MinSamples must be >= 1 after defaulting")
 	}
-
-	// Single point: no neighbors, everything is noise.
 	if n == 1 {
 		r := emptyResult(1)
 		r.Labels[0] = -1
 		return r, nil
 	}
 
-	coreDistances := ComputeCoreDistances(distMatrix, n, minSamples)
-	mrMatrix := MutualReachability(distMatrix, coreDistances, n, cfg.Alpha)
-	mstEdges := PrimMST(mrMatrix, n)
+	var tree SpatialTree
+	switch algo {
+	case AlgorithmPrimsKDTree:
+		tree = NewKDTree(flatData, n, dims, cfg.Metric, cfg.LeafSize)
+	default:
+		tree = NewBallTree(flatData, n, dims, cfg.Metric, cfg.LeafSize)
+	}
+
+	coreDistances := ComputeCoreDistancesTree(tree, minSamples)
+	mstEdges := PrimMSTVector(flatData, n, dims, coreDistances, cfg.Metric, cfg.Alpha)
+	return clusterFromMST(mstEdges, n, cfg)
+}
+
+// clusterBoruvka runs the HDBSCAN pipeline using dual-tree Borůvka MST construction.
+func clusterBoruvka(flatData []float64, n, dims int, cfg Config, algo Algorithm) (*Result, error) {
+	if n == 1 {
+		r := emptyResult(1)
+		r.Labels[0] = -1
+		return r, nil
+	}
+
+	minSamples := cfg.MinSamples
+	if minSamples > n-1 {
+		minSamples = n - 1
+	}
+
+	var tree BoruvkaTree
+	switch algo {
+	case AlgorithmBoruvkaKDTree:
+		tree = NewKDTree(flatData, n, dims, cfg.Metric, cfg.LeafSize)
+	default:
+		tree = NewBallTree(flatData, n, dims, cfg.Metric, cfg.LeafSize)
+	}
+
+	var mstEdges [][3]float64
+	switch algo {
+	case AlgorithmBoruvkaKDTree:
+		b := NewKDTreeBoruvka(tree, cfg.Metric, minSamples, cfg.Alpha)
+		mstEdges, _ = b.SpanningTree()
+	default:
+		b := NewBallTreeBoruvka(tree, cfg.Metric, minSamples, cfg.Alpha)
+		mstEdges, _ = b.SpanningTree()
+	}
+
+	return clusterFromMST(mstEdges, n, cfg)
+}
+
+// clusterFromMST runs the HDBSCAN pipeline from MST edges onward
+// (Label → CondenseTree → selection → labels/probabilities → outlier scores).
+func clusterFromMST(mstEdges [][3]float64, n int, cfg Config) (*Result, error) {
 	dendrogram := Label(mstEdges, n)
 	condensedTree := CondenseTree(dendrogram, cfg.MinClusterSize)
 
@@ -268,4 +369,26 @@ func clusterFromDistMatrix(distMatrix []float64, n int, cfg Config) (*Result, er
 		CondensedTree:     condensedTree,
 		SingleLinkageTree: dendrogram,
 	}, nil
+}
+
+// clusterFromDistMatrix runs the HDBSCAN pipeline from a precomputed distance matrix.
+func clusterFromDistMatrix(distMatrix []float64, n int, cfg Config) (*Result, error) {
+	minSamples := cfg.MinSamples
+	if minSamples > n-1 {
+		minSamples = n - 1
+	}
+	if minSamples < 1 && n > 1 {
+		return nil, errors.New("hdbscan: MinSamples must be >= 1 after defaulting")
+	}
+
+	if n == 1 {
+		r := emptyResult(1)
+		r.Labels[0] = -1
+		return r, nil
+	}
+
+	coreDistances := ComputeCoreDistances(distMatrix, n, minSamples)
+	mrMatrix := MutualReachability(distMatrix, coreDistances, n, cfg.Alpha)
+	mstEdges := PrimMST(mrMatrix, n)
+	return clusterFromMST(mstEdges, n, cfg)
 }

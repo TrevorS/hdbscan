@@ -142,3 +142,45 @@ func benchFullPipeline(b *testing.B, n int) {
 func BenchmarkFullPipeline_100(b *testing.B)  { benchFullPipeline(b, 100) }
 func BenchmarkFullPipeline_500(b *testing.B)  { benchFullPipeline(b, 500) }
 func BenchmarkFullPipeline_1000(b *testing.B) { benchFullPipeline(b, 1000) }
+
+// --- Per-Algorithm Full Pipeline ---
+
+func benchAlgorithm(b *testing.B, n int, algo Algorithm) {
+	b.Helper()
+	dims := 2
+	data := generateBenchData(n, dims)
+	cfg := DefaultConfig()
+	cfg.MinClusterSize = 5
+	cfg.Algorithm = algo
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := Cluster(data, cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkBrute_100(b *testing.B)           { benchAlgorithm(b, 100, AlgorithmBrute) }
+func BenchmarkBrute_500(b *testing.B)           { benchAlgorithm(b, 500, AlgorithmBrute) }
+func BenchmarkBrute_1000(b *testing.B)          { benchAlgorithm(b, 1000, AlgorithmBrute) }
+func BenchmarkPrimsKDTree_100(b *testing.B)     { benchAlgorithm(b, 100, AlgorithmPrimsKDTree) }
+func BenchmarkPrimsKDTree_500(b *testing.B)     { benchAlgorithm(b, 500, AlgorithmPrimsKDTree) }
+func BenchmarkPrimsKDTree_1000(b *testing.B)    { benchAlgorithm(b, 1000, AlgorithmPrimsKDTree) }
+func BenchmarkPrimsBalltree_100(b *testing.B)   { benchAlgorithm(b, 100, AlgorithmPrimsBalltree) }
+func BenchmarkPrimsBalltree_500(b *testing.B)   { benchAlgorithm(b, 500, AlgorithmPrimsBalltree) }
+func BenchmarkPrimsBalltree_1000(b *testing.B)  { benchAlgorithm(b, 1000, AlgorithmPrimsBalltree) }
+func BenchmarkBoruvkaKDTree_100(b *testing.B)   { benchAlgorithm(b, 100, AlgorithmBoruvkaKDTree) }
+func BenchmarkBoruvkaKDTree_500(b *testing.B)   { benchAlgorithm(b, 500, AlgorithmBoruvkaKDTree) }
+func BenchmarkBoruvkaKDTree_1000(b *testing.B)  { benchAlgorithm(b, 1000, AlgorithmBoruvkaKDTree) }
+func BenchmarkBoruvkaBalltree_100(b *testing.B) { benchAlgorithm(b, 100, AlgorithmBoruvkaBalltree) }
+func BenchmarkBoruvkaBalltree_500(b *testing.B) { benchAlgorithm(b, 500, AlgorithmBoruvkaBalltree) }
+func BenchmarkBoruvkaBalltree_1000(b *testing.B) {
+	benchAlgorithm(b, 1000, AlgorithmBoruvkaBalltree)
+}
+func BenchmarkBrute_5000(b *testing.B)           { benchAlgorithm(b, 5000, AlgorithmBrute) }
+func BenchmarkPrimsKDTree_5000(b *testing.B)     { benchAlgorithm(b, 5000, AlgorithmPrimsKDTree) }
+func BenchmarkPrimsBalltree_5000(b *testing.B)   { benchAlgorithm(b, 5000, AlgorithmPrimsBalltree) }
+func BenchmarkBoruvkaKDTree_5000(b *testing.B)   { benchAlgorithm(b, 5000, AlgorithmBoruvkaKDTree) }
+func BenchmarkBoruvkaBalltree_5000(b *testing.B) { benchAlgorithm(b, 5000, AlgorithmBoruvkaBalltree) }

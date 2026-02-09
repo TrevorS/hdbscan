@@ -17,4 +17,16 @@
 // For precomputed distance matrices:
 //
 //	result, err := hdbscan.ClusterPrecomputed(distMatrix, n, cfg)
+//
+// # Algorithm selection
+//
+// By default (Algorithm: "auto"), Cluster picks the best MST construction
+// strategy based on the metric and dimensionality. For standard metrics on
+// low-dimensional data, it uses dual-tree Borůvka with a KD-tree, which is
+// significantly faster and uses O(n) memory instead of O(n²). Set
+// Config.Algorithm to force a specific strategy:
+//
+//	cfg.Algorithm = hdbscan.AlgorithmBrute          // full distance matrix
+//	cfg.Algorithm = hdbscan.AlgorithmBoruvkaKDTree  // dual-tree Borůvka + KD-tree
+//	cfg.Algorithm = hdbscan.AlgorithmPrimsKDTree    // matrix-free Prim's + KD-tree
 package hdbscan
